@@ -1,0 +1,38 @@
+# Project-specific
+.skills
+.agents
+skills-lock.json
+images.json
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+
+# Xcode - user-specific state
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+*.moved-aside
+
+# Xcode - build output
+build/
+DerivedData/
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# CocoaPods / Carthage (por si se usan en el futuro)
+Pods/
+Carthage/Build/
+
+# Otros
+*.log

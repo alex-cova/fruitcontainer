@@ -1,59 +1,121 @@
-//
-//  ContentView.swift
-//  Fruit Container
-//
-//  Created by Alejandro Covarrubias on 25/06/26.
-//
-
 import SwiftUI
-import SwiftData
 
 struct ContentView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query private var items: [Item]
+    @EnvironmentObject private var appModel: AppModel
+    let updater: any AppUpdaterProviding
+    @AppStorage(.showSidebarBadgesKey) private var showSidebarBadges = true
 
     var body: some View {
         NavigationSplitView {
-            List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))")
-                    } label: {
-                        Text(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))
-                    }
-                }
-                .onDelete(perform: deleteItems)
+            List(FruitSection.allCases, selection: $appModel.selectedFruitSection) { section in
+                Label(section.title, systemImage: section.systemImage)
+                    .badge(badge(for: section))
+                    .tag(section)
             }
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200)
-            .toolbar {
-                ToolbarItem {
-                    Button(action: addItem) {
-                        Label("Add Item", systemImage: "plus")
-                    }
-                }
-            }
+            .listStyle(.sidebar)
+            .navigationTitle("Fruit Container")
+            .navigationSplitViewColumnWidth(min: 190, ideal: 220, max: 280)
         } detail: {
-            Text("Select an item")
-        }
-    }
-
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(timestamp: Date())
-            modelContext.insert(newItem)
-        }
-    }
-
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            for index in offsets {
-                modelContext.delete(items[index])
+            Group {
+                switch appModel.selectedFruitSection ?? .dashboard {
+                case .dashboard:
+                    DashboardView()
+                case .containers:
+                    ContainersWorkspaceView()
+                case .images:
+                    ImagesWorkspaceView()
+                case .registries:
+                    RegistriesWorkspaceView()
+                case .networks:
+                    NetworksWorkspaceView()
+                case .volumes:
+                    VolumesWorkspaceView()
+                case .activity:
+                    ActivityWorkspaceView()
+                case .settings:
+                    SettingsWorkspaceView(updater: updater)
+                }
             }
+            .navigationTitle((appModel.selectedFruitSection ?? .dashboard).title)
+            .background(FruitTheme.pageBackground)
+        }
+        .navigationSplitViewStyle(.balanced)
+        .background(FruitTheme.pageBackground)
+    }
+
+    private func badge(for section: FruitSection) -> Int {
+        guard showSidebarBadges else { return 0 }
+
+        return switch section {
+        case .dashboard, .settings:
+            0
+        case .containers:
+            appModel.containers.count
+        case .images:
+            appModel.images.count
+        case .registries:
+            appModel.registrySessionCount
+        case .networks:
+            appModel.networks.count
+        case .volumes:
+            appModel.volumes.count
+        case .activity:
+            appModel.activities.filter(\.status.isActive).count
         }
     }
 }
 
-#Preview {
-    ContentView()
-        .modelContainer(for: Item.self, inMemory: true)
+enum FruitSection: String, CaseIterable, Identifiable, Codable, Sendable {
+    case dashboard
+    case containers
+    case images
+    case registries
+    case networks
+    case volumes
+    case activity
+    case settings
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .dashboard: "Dashboard"
+        case .containers: "Containers"
+        case .images: "Images"
+        case .registries: "Registries"
+        case .networks: "Networks"
+        case .volumes: "Volumes"
+        case .activity: "Logs"
+        case .settings: "Settings"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .dashboard: "rectangle.3.group"
+        case .containers: "truck.box"
+        case .images: "photo.stack"
+        case .registries: "externaldrive.badge.wifi"
+        case .networks: "network"
+        case .volumes: "internaldrive"
+        case .activity: "list.bullet.rectangle"
+        case .settings: "gearshape"
+        }
+    }
 }
+
+enum FruitTheme {
+    static let pageBackground = Color(nsColor: .textBackgroundColor)
+    static let controlBackground = Color(nsColor: .controlBackgroundColor)
+    static let separator = Color(nsColor: .separatorColor)
+    static let cardFill = AnyShapeStyle(.quaternary)
+    static let chromeFill = AnyShapeStyle(.bar)
+}
+
+#if DEBUG
+#Preview {
+    ContentView(updater: DisabledAppUpdater())
+        .environmentObject(AppModel.preview)
+        .frame(width: 1100, height: 720)
+}
+#endif
