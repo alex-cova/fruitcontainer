@@ -48,12 +48,29 @@ struct DashboardView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Apple container at a glance")
-                .font(.largeTitle.weight(.semibold))
-            Text("Service health, local resources, and recent operations without leaving macOS.")
-                .foregroundStyle(.secondary)
+        HStack(alignment: .center, spacing: 16) {
+            Image(systemName: "shippingbox.and.arrow.backward")
+                .font(.title.weight(.semibold))
+                .foregroundStyle(serviceTint)
+                .frame(width: 54, height: 54)
+                .background(serviceTint.opacity(0.12), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Apple container at a glance")
+                    .font(.largeTitle.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                Text("Service health, local resources, and recent operations without leaving macOS.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 12)
+
+            StatusBadge(text: serviceValue, color: serviceTint)
         }
+        .padding(.bottom, 4)
     }
 
     private var statusGrid: some View {
@@ -93,13 +110,15 @@ struct DashboardView: View {
         Panel(title: "Recommended Next Action", systemImage: "sparkles") {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: nextActionIcon)
-                    .font(.title3)
+                    .font(.title3.weight(.semibold))
                     .foregroundStyle(nextActionTint)
-                    .frame(width: 28)
+                    .frame(width: 34, height: 34)
+                    .background(nextActionTint.opacity(0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                 VStack(alignment: .leading, spacing: 4) {
                     Text(nextActionTitle)
                         .font(.headline)
                     Text(nextActionDetail)
+                        .font(.callout)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -127,14 +146,18 @@ struct DashboardView: View {
                         systemImage: "truck.box"
                     )
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 if appModel.containerMetrics.isEmpty {
-                    ContentUnavailableView(
-                        "No Metrics Available",
+                    ActionableEmptyState(
+                        title: "No Metrics Available",
                         systemImage: "chart.bar.xaxis",
-                        description: Text("Run a container to start sampling CPU, memory, network, and process metrics.")
+                        message: "Run a container to start sampling CPU, memory, network, and process metrics.",
+                        actionTitle: appModel.containers.isEmpty ? nil : "Open Containers",
+                        actionSystemImage: "truck.box",
+                        action: appModel.containers.isEmpty ? nil : { appModel.selectedFruitSection = .containers }
                     )
-                    .frame(maxWidth: .infinity, minHeight: 200)
+                    .frame(minHeight: 200)
                 } else {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 12)], spacing: 12) {
                         MetricsChartCard(
@@ -160,7 +183,11 @@ struct DashboardView: View {
                             }
                         }
                     }
-                    .background(FruitTheme.cardFill, in: RoundedRectangle(cornerRadius: 8))
+                    .background(FruitTheme.cardFill, in: RoundedRectangle(cornerRadius: FruitTheme.cornerRadius, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: FruitTheme.cornerRadius, style: .continuous)
+                            .stroke(FruitTheme.hairline)
+                    }
                 }
             }
         }
@@ -169,8 +196,15 @@ struct DashboardView: View {
     private var recentActivityPanel: some View {
         Panel(title: "Recent Activity", systemImage: "clock.arrow.circlepath") {
             if appModel.activities.isEmpty {
-                ContentUnavailableView("No Operations Yet", systemImage: "clock", description: Text("Commands you run from Fruit Container will appear here."))
-                    .frame(maxWidth: .infinity, minHeight: 120)
+                ActionableEmptyState(
+                    title: "No Operations Yet",
+                    systemImage: "clock",
+                    message: "Commands you run from Fruit Container will appear here.",
+                    actionTitle: "Open Logs",
+                    actionSystemImage: "list.bullet.rectangle",
+                    action: { appModel.selectedFruitSection = .activity }
+                )
+                .frame(minHeight: 140)
             } else {
                 VStack(spacing: 0) {
                     ForEach(appModel.activities.prefix(5)) { activity in
@@ -399,13 +433,17 @@ private struct MetricCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
+            HStack(alignment: .center) {
                 Image(systemName: systemImage)
+                    .font(.headline.weight(.semibold))
                     .foregroundStyle(tint)
+                    .frame(width: 34, height: 34)
+                    .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                 Spacer()
             }
             Text(value)
-                .font(.system(size: 28, weight: .semibold))
+                .font(.title.weight(.semibold))
+                .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             VStack(alignment: .leading, spacing: 2) {
@@ -419,7 +457,11 @@ private struct MetricCard: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, minHeight: 150, alignment: .topLeading)
-        .background(FruitTheme.cardFill, in: RoundedRectangle(cornerRadius: 8))
+        .background(FruitTheme.cardFill, in: RoundedRectangle(cornerRadius: FruitTheme.cornerRadius, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: FruitTheme.cornerRadius, style: .continuous)
+                .stroke(FruitTheme.hairline)
+        }
     }
 }
 
@@ -443,7 +485,11 @@ private struct MetricsSummaryChip: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(FruitTheme.cardFill, in: RoundedRectangle(cornerRadius: 8))
+        .background(FruitTheme.controlBackground, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .stroke(FruitTheme.hairline)
+        }
     }
 }
 
@@ -473,7 +519,11 @@ private struct MetricsChartCard<Content: View>: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(FruitTheme.cardFill, in: RoundedRectangle(cornerRadius: 8))
+        .background(FruitTheme.controlBackground, in: RoundedRectangle(cornerRadius: FruitTheme.cornerRadius, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: FruitTheme.cornerRadius, style: .continuous)
+                .stroke(FruitTheme.hairline)
+        }
     }
 }
 

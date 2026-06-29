@@ -40,9 +40,15 @@ struct MenuBarDashboardView: View {
 
     private var header: some View {
         HStack(alignment: .center, spacing: 10) {
+            Image(systemName: "shippingbox")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(FruitDarkPalette.blueAccent)
+                .frame(width: 34, height: 34)
+                .background(FruitDarkPalette.blueAccent.opacity(0.16), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+
             VStack(alignment: .leading, spacing: 4) {
-                Text("🍎 Fruit Container")
-                    .font(.system(size: 18, weight: .semibold))
+                Text("Fruit Container")
+                    .font(.headline.weight(.semibold))
                     .foregroundStyle(FruitDarkPalette.primaryText)
 
                 HStack(spacing: 6) {
@@ -70,8 +76,8 @@ struct MenuBarDashboardView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-        .background(FruitDarkPalette.cardBackground, in: RoundedRectangle(cornerRadius: 8))
-        .overlay(FruitDarkPalette.cardBorder(cornerRadius: 8))
+        .background(FruitDarkPalette.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(FruitDarkPalette.cardBorder(cornerRadius: 12))
     }
 
     /// Surfaces a "Start" button in the header whenever the runtime service is
@@ -118,13 +124,49 @@ struct MenuBarDashboardView: View {
             if !appModel.containers.isEmpty {
                 separator
                 containerList
+            } else {
+                separator
+                emptyMenuRow("No containers", detail: "Run an image from the main window.", symbol: "truck.box")
             }
             separator
-            Spacer()
-          
+            resourceRow(
+                target: .images,
+                title: "Images",
+                value: "\(appModel.images.count)",
+                detail: appModel.images.isEmpty ? "none pulled" : "local images",
+                symbol: "photo.stack",
+                tint: FruitDarkPalette.purpleAccent
+            )
+            separator
+            resourceRow(
+                target: .networks,
+                title: "Networks",
+                value: "\(appModel.networks.count)",
+                detail: "\(attachedNetworkCount) attached",
+                symbol: "network",
+                tint: FruitDarkPalette.cyanAccent
+            )
+            separator
+            resourceRow(
+                target: .volumes,
+                title: "Volumes",
+                value: "\(appModel.volumes.count)",
+                detail: "\(referencedVolumeCount) referenced",
+                symbol: "internaldrive",
+                tint: FruitDarkPalette.greenAccent
+            )
+            separator
+            resourceRow(
+                target: .activity,
+                title: "Logs",
+                value: "\(appModel.activities.count)",
+                detail: operationsDisplay,
+                symbol: "list.bullet.rectangle",
+                tint: failedOperationCount > 0 ? .red : FruitDarkPalette.blueAccent
+            )
         }
-        .background(FruitDarkPalette.cardBackground, in: RoundedRectangle(cornerRadius: 8))
-        .overlay(FruitDarkPalette.cardBorder(cornerRadius: 8))
+        .background(FruitDarkPalette.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(FruitDarkPalette.cardBorder(cornerRadius: 12))
     }
 
     private var containerList: some View {
@@ -166,6 +208,13 @@ struct MenuBarDashboardView: View {
 
                 Spacer(minLength: 8)
 
+                Text(container.imageName)
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(FruitDarkPalette.tertiaryText)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .frame(maxWidth: 90, alignment: .trailing)
+
                 if inFlightVerb != nil {
                     ProgressView()
                         .controlSize(.small)
@@ -181,6 +230,8 @@ struct MenuBarDashboardView: View {
         }
         .buttonStyle(.plain)
         .help(container.name)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(container.name), \(container.state.rawValue), \(container.imageName)")
     }
 
     /// Returns "Starting…" or "Stopping…" when a queued or running lifecycle
@@ -433,6 +484,30 @@ struct MenuBarDashboardView: View {
         .help(title)
     }
 
+    private func emptyMenuRow(_ title: String, detail: String, symbol: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: symbol)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(FruitDarkPalette.tertiaryText)
+                .frame(width: 28, height: 28)
+                .background(FruitDarkPalette.controlBackground, in: RoundedRectangle(cornerRadius: 7))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(FruitDarkPalette.secondaryText)
+                Text(detail)
+                    .font(.caption2)
+                    .foregroundStyle(FruitDarkPalette.tertiaryText)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 9)
+    }
+
     private func resourceRow(
         target: FruitSection,
         title: String,
@@ -455,10 +530,18 @@ struct MenuBarDashboardView: View {
                     Text(title)
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(FruitDarkPalette.primaryText)
+                    Text(detail)
+                        .font(.caption2)
+                        .foregroundStyle(FruitDarkPalette.secondaryText)
+                        .lineLimit(1)
                 }
 
                 Spacer(minLength: 10)
 
+                Text(value)
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .foregroundStyle(FruitDarkPalette.primaryText)
+                    .monospacedDigit()
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
@@ -466,6 +549,7 @@ struct MenuBarDashboardView: View {
         }
         .buttonStyle(.plain)
         .help("Show \(target.title)")
+        .accessibilityLabel("\(title), \(value), \(detail)")
     }
 
     private func showMainWindow(selecting section: FruitSection? = nil) {

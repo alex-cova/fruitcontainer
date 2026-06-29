@@ -30,8 +30,14 @@ struct ContainersWorkspaceView: View {
                 ProgressView("Loading containers...")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if filteredContainers.isEmpty {
-                ContentUnavailableView("No Containers", systemImage: "truck.box", description: Text("Run an image to create a lightweight Linux VM-backed container."))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ActionableEmptyState(
+                    title: searchText.isEmpty ? "No Containers" : "No Matching Containers",
+                    systemImage: searchText.isEmpty ? "truck.box" : "magnifyingglass",
+                    message: searchText.isEmpty ? "Run an image to create a lightweight Linux VM-backed container." : "No containers match \"\(searchText)\".",
+                    actionTitle: searchText.isEmpty ? "Run Container" : "Clear Search",
+                    actionSystemImage: searchText.isEmpty ? "play.fill" : "xmark.circle",
+                    action: searchText.isEmpty ? { showingRunSheet = true } : { searchText = "" }
+                )
             } else {
                 HSplitView {
                     containerCatalog
@@ -160,8 +166,11 @@ struct ContainersWorkspaceView: View {
                 }
                 .background(FruitTheme.pageBackground)
             } else {
-                ContentUnavailableView("Select a Container", systemImage: "sidebar.right", description: Text("Inspect configuration and recent logs for one container."))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ActionableEmptyState(
+                    title: "Select a Container",
+                    systemImage: "sidebar.right",
+                    message: "Inspect configuration, relationships, logs, and raw JSON for one container."
+                )
             }
         }
     }
@@ -218,16 +227,25 @@ struct ContainersWorkspaceView: View {
                     DetailRow("Ports", selectedInspect?.portsDisplay ?? container.portsDisplay)
                 }
 
-                if let selectedInspect, !selectedInspect.environment.isEmpty {
-                    Panel(title: "Environment", systemImage: "list.bullet.rectangle") {
+                if let selectedInspect, !selectedInspect.attachedVolumes.isEmpty {
+                    Panel(title: "Volumes", systemImage: "internaldrive") {
                         VStack(alignment: .leading, spacing: 6) {
-                            ForEach(selectedInspect.environment, id: \.self) { value in
-                                Text(value)
-                                    .font(.system(.caption, design: .monospaced))
-                                    .textSelection(.enabled)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            ForEach(selectedInspect.attachedVolumes, id: \.self) { volume in
+                                DetailRow(volume.name, volume.destination)
                             }
                         }
+                    }
+                }
+
+                if let selectedInspect, !selectedInspect.environment.isEmpty {
+                    Panel(title: "Environment", systemImage: "list.bullet.rectangle") {
+                        CodeBlock(text: selectedInspect.environment.joined(separator: "\n"))
+                    }
+                }
+
+                if let selectedInspect, !selectedInspect.labels.isEmpty {
+                    Panel(title: "Labels", systemImage: "tag") {
+                        KeyValueList(values: selectedInspect.labels)
                     }
                 }
             }
@@ -294,17 +312,19 @@ struct ContainersWorkspaceView: View {
                             } label: {
                                 Label("Copy JSON", systemImage: "doc.on.doc")
                             }
+                            .accessibilityLabel("Copy inspect JSON")
                             Spacer()
                         }
 
-                        Text(selectedInspect.rawJSON)
-                            .font(.system(.caption, design: .monospaced))
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        CodeBlock(text: selectedInspect.rawJSON)
                     }
                 } else {
-                    ContentUnavailableView("Inspect Data Loading", systemImage: "curlybraces", description: Text("Select a container and wait for inspect output to finish loading."))
-                        .frame(maxWidth: .infinity, minHeight: 220)
+                    ActionableEmptyState(
+                        title: "Inspect Data Loading",
+                        systemImage: "curlybraces",
+                        message: "Select a container and wait for inspect output to finish loading."
+                    )
+                    .frame(minHeight: 220)
                 }
             }
             .padding(14)
@@ -474,11 +494,7 @@ private struct LogOutputPanel: View {
                     .disabled(text.isEmpty)
                 }
 
-                Text(displayText)
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(text.isEmpty ? .secondary : .primary)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                CodeBlock(text: displayText, emptyText: emptyText)
             }
         }
     }
@@ -526,7 +542,11 @@ private struct ContainerStatTile: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, minHeight: 54, alignment: .leading)
-        .background(FruitTheme.cardFill, in: RoundedRectangle(cornerRadius: 8))
+        .background(FruitTheme.cardFill, in: RoundedRectangle(cornerRadius: FruitTheme.cornerRadius, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: FruitTheme.cornerRadius, style: .continuous)
+                .stroke(FruitTheme.hairline)
+        }
     }
 }
 
@@ -578,11 +598,12 @@ private struct ContainerCatalogRow: View {
             }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(rowBackground, in: RoundedRectangle(cornerRadius: 8))
+            .background(rowBackground, in: RoundedRectangle(cornerRadius: FruitTheme.cornerRadius, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(isSelected ? Color.accentColor.opacity(0.55) : Color.clear, lineWidth: 1)
+                RoundedRectangle(cornerRadius: FruitTheme.cornerRadius, style: .continuous)
+                    .stroke(isSelected ? Color.accentColor.opacity(0.65) : FruitTheme.hairline, lineWidth: isSelected ? 1.5 : 1)
             )
+            .contentShape(RoundedRectangle(cornerRadius: FruitTheme.cornerRadius, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
@@ -590,7 +611,7 @@ private struct ContainerCatalogRow: View {
     }
 
     private var rowBackground: Color {
-        isSelected ? Color.accentColor.opacity(0.12) : FruitTheme.controlBackground
+        isSelected ? FruitTheme.selectedFill : FruitTheme.controlBackground
     }
 }
 
@@ -691,9 +712,14 @@ struct RunContainerSheet: View {
                     .pickerStyle(.menu)
                 }
 
-                TextField("Image reference", text: $imageReference)
-                    .font(.system(.body, design: .monospaced))
-                    .textFieldStyle(.roundedBorder)
+                FormField(
+                    title: "Image Reference",
+                    text: $imageReference,
+                    placeholder: "nginx:latest",
+                    helper: "Use a local image or any registry reference.",
+                    error: imageReference.nilIfEmpty == nil ? "Required" : nil,
+                    isMonospaced: true
+                )
 
                 if let selectedLocalImage {
                     HStack(spacing: 8) {
@@ -709,8 +735,8 @@ struct RunContainerSheet: View {
         RunSheetSection(title: "Container", systemImage: "truck.box") {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 12) {
-                    RunTextField(title: "Name", text: $name, placeholder: "Optional")
-                    RunTextField(title: "Arguments", text: $command, placeholder: "Optional", isMonospaced: true)
+                    RunTextField(title: "Name", text: $name, placeholder: "Optional", helper: "Leave blank for CLI-generated name.")
+                    RunTextField(title: "Arguments", text: $command, placeholder: "Optional", helper: "Appended after the image reference.", isMonospaced: true)
                 }
 
                 HStack(spacing: 10) {
@@ -725,11 +751,11 @@ struct RunContainerSheet: View {
         RunSheetSection(title: "Resources", systemImage: "gauge") {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 12) {
-                    RunTextField(title: "CPUs", text: $cpu, placeholder: "Default")
+                    RunTextField(title: "CPUs", text: $cpu, placeholder: "Default", error: cpu.nilIfEmpty != nil && Int(cpu) == nil ? "Whole number" : nil)
                         .frame(maxWidth: 130)
-                    RunTextField(title: "Memory", text: $memory, placeholder: "1g")
+                    RunTextField(title: "Memory", text: $memory, placeholder: "1g", helper: "Examples: 512m, 1g")
                         .frame(maxWidth: 160)
-                    RunTextField(title: "Platform", text: $platform, placeholder: "linux/arm64", isMonospaced: true)
+                    RunTextField(title: "Platform", text: $platform, placeholder: "linux/arm64", helper: "Optional OCI platform.", isMonospaced: true)
                 }
 
                 HStack(spacing: 10) {
@@ -752,8 +778,8 @@ struct RunContainerSheet: View {
     private var networkingSection: some View {
         RunSheetSection(title: "Network & Environment", systemImage: "network") {
             VStack(alignment: .leading, spacing: 12) {
-                RunTextField(title: "Ports", text: $ports, placeholder: "8080:80, 8443:443", isMonospaced: true)
-                RunTextField(title: "Environment", text: $environment, placeholder: "KEY=value, MODE=dev", isMonospaced: true)
+                RunTextField(title: "Ports", text: $ports, placeholder: "8080:80, 8443:443", helper: "Comma-separated host:container mappings.", isMonospaced: true)
+                RunTextField(title: "Environment", text: $environment, placeholder: "KEY=value, MODE=dev", helper: "Comma-separated KEY=value pairs.", isMonospaced: true)
             }
         }
     }
@@ -826,7 +852,11 @@ private struct RunSheetSection<Content: View>: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(FruitTheme.cardFill, in: RoundedRectangle(cornerRadius: 8))
+        .background(FruitTheme.cardFill, in: RoundedRectangle(cornerRadius: FruitTheme.cornerRadius, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: FruitTheme.cornerRadius, style: .continuous)
+                .stroke(FruitTheme.hairline)
+        }
     }
 }
 
@@ -834,17 +864,12 @@ private struct RunTextField: View {
     let title: String
     @Binding var text: String
     let placeholder: String
+    var helper: String?
+    var error: String?
     var isMonospaced = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
-            TextField(placeholder, text: $text)
-                .font(isMonospaced ? Font.system(.body, design: .monospaced) : Font.body)
-                .textFieldStyle(.roundedBorder)
-        }
+        FormField(title: title, text: $text, placeholder: placeholder, helper: helper, error: error, isMonospaced: isMonospaced)
     }
 }
 

@@ -25,8 +25,14 @@ struct ImagesWorkspaceView: View {
                 ProgressView("Loading images...")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if filteredImages.isEmpty {
-                ContentUnavailableView("No Images", systemImage: "photo.stack", description: Text("Pull an OCI-compatible image from a registry to get started."))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ActionableEmptyState(
+                    title: searchText.isEmpty ? "No Images" : "No Matching Images",
+                    systemImage: searchText.isEmpty ? "photo.stack" : "magnifyingglass",
+                    message: searchText.isEmpty ? "Pull an OCI-compatible image from a registry to get started." : "No images match \"\(searchText)\".",
+                    actionTitle: searchText.isEmpty ? "Open Workflow" : "Clear Search",
+                    actionSystemImage: searchText.isEmpty ? "square.and.arrow.down" : "xmark.circle",
+                    action: searchText.isEmpty ? { showingWorkflow = true } : { searchText = "" }
+                )
             } else {
                 HSplitView {
                     imageCatalog.frame(minWidth: 560)
@@ -191,13 +197,15 @@ struct ImagesWorkspaceView: View {
                             Button("Copy") { copyToPasteboard(inspect?.rawJSON ?? "") }.disabled(inspect == nil)
                             Spacer()
                         }
-                        Text(inspect?.rawJSON ?? "No JSON loaded.")
-                            .font(.system(.caption, design: .monospaced))
-                            .textSelection(.enabled)
+                        CodeBlock(text: inspect?.rawJSON ?? "", emptyText: "No JSON loaded.")
                     }
                 } else {
-                    ContentUnavailableView("Select an Image", systemImage: "photo.stack", description: Text("Inspect digest, variants, and raw metadata."))
-                        .frame(maxWidth: .infinity, minHeight: 240)
+                    ActionableEmptyState(
+                        title: "Select an Image",
+                        systemImage: "photo.stack",
+                        message: "Inspect digest, variants, platforms, and raw metadata."
+                    )
+                    .frame(minHeight: 240)
                 }
             }
             .padding(14)
@@ -336,7 +344,7 @@ private struct ImageCatalogRow: View {
         Button(action: action) {
             HStack(alignment: .top, spacing: 12) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 8)
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .fill(iconFill)
                     Image(systemName: image.registrySymbol)
                         .font(.title3.weight(.semibold))
@@ -392,12 +400,12 @@ private struct ImageCatalogRow: View {
             }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(rowBackground, in: RoundedRectangle(cornerRadius: 8))
+            .background(rowBackground, in: RoundedRectangle(cornerRadius: FruitTheme.cornerRadius, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(isSelected ? Color.accentColor.opacity(0.75) : Color.secondary.opacity(0.12), lineWidth: isSelected ? 1.5 : 1)
+                RoundedRectangle(cornerRadius: FruitTheme.cornerRadius, style: .continuous)
+                    .stroke(isSelected ? Color.accentColor.opacity(0.75) : FruitTheme.hairline, lineWidth: isSelected ? 1.5 : 1)
             }
-            .contentShape(RoundedRectangle(cornerRadius: 8))
+            .contentShape(RoundedRectangle(cornerRadius: FruitTheme.cornerRadius, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(image.reference), \(image.variantDisplay)")
@@ -425,7 +433,7 @@ private struct ImageCatalogRow: View {
     }
 
     private var rowBackground: Color {
-        isSelected ? Color.accentColor.opacity(0.10) : FruitTheme.controlBackground
+        isSelected ? FruitTheme.selectedFill : FruitTheme.controlBackground
     }
 
     private var iconFill: Color {
@@ -472,7 +480,11 @@ private struct ImageStatTile: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
-        .background(FruitTheme.cardFill, in: RoundedRectangle(cornerRadius: 8))
+        .background(FruitTheme.cardFill, in: RoundedRectangle(cornerRadius: FruitTheme.cornerRadius, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: FruitTheme.cornerRadius, style: .continuous)
+                .stroke(FruitTheme.hairline)
+        }
     }
 }
 
@@ -568,7 +580,8 @@ struct ImageWorkflowSheet: View {
             workflowField(
                 title: "Image reference",
                 text: $pullReference,
-                placeholder: "nginx:latest"
+                placeholder: "nginx:latest",
+                helper: "Docker Hub references such as nginx:latest work without a registry prefix."
             )
 
             workflowCommand("container image pull --progress plain -- \(pullReference.nilIfEmpty ?? "<image>")")
@@ -601,7 +614,8 @@ struct ImageWorkflowSheet: View {
             workflowField(
                 title: "Target reference",
                 text: $tagTarget,
-                placeholder: "registry.example.com/team/app:latest"
+                placeholder: "registry.example.com/team/app:latest",
+                helper: "Use a registry, repository, and tag that you can push later."
             )
 
             workflowCommand("container image tag \(tagSource.isEmpty ? "<source>" : tagSource) \(tagTarget.nilIfEmpty ?? "<target>")")
@@ -636,7 +650,8 @@ struct ImageWorkflowSheet: View {
             workflowField(
                 title: "Reference",
                 text: $pushReference,
-                placeholder: "registry.example.com/team/app:latest"
+                placeholder: "registry.example.com/team/app:latest",
+                helper: "The reference must point at the destination registry."
             )
 
             workflowCommand("container image push \(pushReference.nilIfEmpty ?? "<reference>")")
@@ -655,7 +670,7 @@ struct ImageWorkflowSheet: View {
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(.blue)
                 .frame(width: 34, height: 34)
-                .background(.blue.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+                .background(.blue.opacity(0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
@@ -691,21 +706,18 @@ struct ImageWorkflowSheet: View {
             }
             .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(FruitTheme.cardFill, in: RoundedRectangle(cornerRadius: 8))
+            .background(FruitTheme.cardFill, in: RoundedRectangle(cornerRadius: FruitTheme.cornerRadius, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: FruitTheme.cornerRadius, style: .continuous)
+                    .stroke(FruitTheme.hairline)
+            }
         }
         .buttonStyle(.plain)
         .help(image.reference)
     }
 
-    private func workflowField(title: String, text: Binding<String>, placeholder: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
-            TextField(placeholder, text: text)
-                .font(.system(.body, design: .monospaced))
-                .textFieldStyle(.roundedBorder)
-        }
+    private func workflowField(title: String, text: Binding<String>, placeholder: String, helper: String? = nil) -> some View {
+        FormField(title: title, text: text, placeholder: placeholder, helper: helper, isMonospaced: true)
     }
 
     private func workflowCommand(_ command: String) -> some View {
@@ -730,32 +742,6 @@ struct ImageWorkflowSheet: View {
         DispatchQueue.main.async {
             appModel.selectedFruitSection = .activity
         }
-    }
-}
-
-struct CommandPreview: View {
-    let command: String
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Text(command)
-                .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            Button {
-                copyToPasteboard(command)
-            } label: {
-                Image(systemName: "doc.on.doc")
-                    .frame(width: 22, height: 22)
-            }
-            .buttonStyle(.borderless)
-            .help("Copy command")
-        }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(FruitTheme.cardFill, in: RoundedRectangle(cornerRadius: 8))
     }
 }
 

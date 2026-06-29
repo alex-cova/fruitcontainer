@@ -21,8 +21,14 @@ struct NetworksWorkspaceView: View {
                 ProgressView("Loading networks...")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if filteredNetworks.isEmpty {
-                ContentUnavailableView("No Networks", systemImage: "network", description: Text("Create a custom network or start the service to view built-in networks."))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ActionableEmptyState(
+                    title: searchText.isEmpty ? "No Networks" : "No Matching Networks",
+                    systemImage: searchText.isEmpty ? "network" : "magnifyingglass",
+                    message: searchText.isEmpty ? "Create a custom network or start the service to view built-in networks." : "No networks match \"\(searchText)\".",
+                    actionTitle: searchText.isEmpty ? "Create Network" : "Clear Search",
+                    actionSystemImage: searchText.isEmpty ? "plus" : "xmark.circle",
+                    action: searchText.isEmpty ? { showingCreateSheet = true } : { searchText = "" }
+                )
             } else {
                 HSplitView {
                     networkTable.frame(minWidth: 560)
@@ -115,21 +121,34 @@ struct NetworksWorkspaceView: View {
             TableColumn("Name") { network in
                 VStack(alignment: .leading, spacing: 2) {
                     Text(network.name).fontWeight(.medium)
-                    Text(network.id).font(.caption.monospaced()).foregroundStyle(.secondary).lineLimit(1)
+                    Text(network.id)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Network \(network.name), ID \(network.id)")
             }
+            .width(min: 180, ideal: 230)
             TableColumn("Mode") { network in
                 Text(network.mode ?? "-")
             }
+            .width(min: 72, ideal: 96, max: 120)
             TableColumn("Subnet") { network in
                 Text(network.ipv4Subnet ?? network.ipv6Subnet ?? "-").lineLimit(1)
             }
+            .width(min: 150, ideal: 190)
             TableColumn("Attached") { network in
                 Text("\(appModel.networks.first { $0.name == network.name }?.attachedContainerCount ?? 0)")
+                    .monospacedDigit()
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             }
+            .width(min: 72, ideal: 86, max: 100)
             TableColumn("Role") { network in
                 StatusBadge(text: network.isBuiltin ? "Built-in" : "Custom", color: network.isBuiltin ? .secondary : .blue)
             }
+            .width(min: 96, ideal: 110, max: 130)
         }
     }
 
@@ -139,27 +158,37 @@ struct NetworksWorkspaceView: View {
                 if let network = selectedNetwork {
                     Panel(title: "Details", systemImage: "info.circle") {
                         DetailRow("Name", network.name)
+                        DetailRow("ID", network.id)
                         DetailRow("State", inspect?.state ?? network.state ?? "-")
                         DetailRow("Mode", inspect?.mode ?? network.mode ?? "-")
+                        DetailRow("Role", network.isBuiltin ? "Built-in" : "Custom")
+                    }
+                    Panel(title: "Configuration", systemImage: "slider.horizontal.3") {
                         DetailRow("IPv4 Subnet", inspect?.ipv4Subnet ?? network.ipv4Subnet ?? "-")
                         DetailRow("IPv6 Subnet", inspect?.ipv6Subnet ?? network.ipv6Subnet ?? "-")
                         DetailRow("Gateway", inspect?.ipv4Gateway ?? "-")
                         DetailRow("Plugin", inspect?.plugin ?? network.plugin ?? "-")
+                        DetailRow("Variant", inspect?.pluginVariant ?? network.pluginVariant ?? "-")
+                    }
+                    Panel(title: "Labels", systemImage: "tag") {
+                        KeyValueList(values: inspect?.labels ?? network.labels)
                     }
                     Panel(title: "Inspect JSON", systemImage: "curlybraces") {
                         HStack {
-                            Button("Reload") { Task { await loadInspect() } }
-                            Button("Copy") { copyToPasteboard(inspect?.rawJSON ?? "") }.disabled(inspect == nil)
+                            Button { Task { await loadInspect() } } label: { Label("Reload", systemImage: "arrow.clockwise") }
+                            Button { copyToPasteboard(inspect?.rawJSON ?? "") } label: { Label("Copy JSON", systemImage: "doc.on.doc") }
+                                .disabled(inspect == nil)
                             Spacer()
                         }
-                        Text(inspect?.rawJSON ?? "No inspect output loaded.")
-                            .font(.system(.caption, design: .monospaced))
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        CodeBlock(text: inspect?.rawJSON ?? "", emptyText: "No inspect output loaded.")
                     }
                 } else {
-                    ContentUnavailableView("Select a Network", systemImage: "network", description: Text("Inspect subnets, plugin metadata, labels, and raw JSON."))
-                        .frame(maxWidth: .infinity, minHeight: 240)
+                    ActionableEmptyState(
+                        title: "Select a Network",
+                        systemImage: "network",
+                        message: "Inspect subnets, plugin metadata, labels, and raw JSON."
+                    )
+                    .frame(minHeight: 240)
                 }
             }
             .padding(14)
@@ -252,41 +281,65 @@ private struct CreateNetworkSheet: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("Network") {
-                    TextField("Name", text: $name)
-                    TextField("IPv4 subnet", text: $ipv4Subnet)
-                    TextField("IPv6 subnet", text: $ipv6Subnet)
-                    Toggle("Internal network", isOn: $isInternal)
-                }
-                Section("Labels") {
-                    TextField("key=value,key2=value2", text: $labels)
-                }
-            }
-            .formStyle(.grouped)
-            .navigationTitle("Create Network")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Create") {
-                        onCreate(
-                            NetworkCreateViewRequest(
-                                name: name.trimmingCharacters(in: .whitespacesAndNewlines),
-                                ipv4Subnet: ipv4Subnet.nilIfEmpty,
-                                ipv6Subnet: ipv6Subnet.nilIfEmpty,
-                                labels: dictionaryList(labels),
-                                isInternal: isInternal
-                            )
-                        )
-                        dismiss()
+            VStack(spacing: 0) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Panel(title: "Network", systemImage: "network") {
+                            FormField(title: "Name", text: $name, placeholder: "frontend", helper: "Required unique network name.")
+                            FormField(title: "IPv4 Subnet", text: $ipv4Subnet, placeholder: "10.42.0.0/24", helper: "Optional CIDR subnet.", isMonospaced: true)
+                            FormField(title: "IPv6 Subnet", text: $ipv6Subnet, placeholder: "fd00:42::/64", helper: "Optional IPv6 CIDR subnet.", isMonospaced: true)
+                            Toggle("Internal network", isOn: $isInternal)
+                        }
+                        Panel(title: "Labels", systemImage: "tag") {
+                            FormField(title: "Labels", text: $labels, placeholder: "key=value,key2=value2", helper: "Comma-separated metadata pairs.", isMonospaced: true)
+                        }
                     }
-                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .padding(18)
                 }
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 12) {
+                    CommandPreview(command: commandPreview)
+                    HStack {
+                        Button("Cancel") { dismiss() }
+                            .keyboardShortcut(.cancelAction)
+                        Spacer()
+                        Button {
+                            onCreate(request)
+                            dismiss()
+                        } label: {
+                            Label("Create Network", systemImage: "plus")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(!canCreate)
+                    }
+                }
+                .padding(18)
+                .background(FruitTheme.chromeFill)
             }
+            .navigationTitle("Create Network")
         }
-        .frame(width: 460, height: 360)
+        .frame(width: 560, height: 520)
+    }
+
+    private var canCreate: Bool {
+        name.nilIfEmpty != nil
+    }
+
+    private var request: NetworkCreateViewRequest {
+        NetworkCreateViewRequest(
+            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+            ipv4Subnet: ipv4Subnet.nilIfEmpty,
+            ipv6Subnet: ipv6Subnet.nilIfEmpty,
+            labels: dictionaryList(labels),
+            isInternal: isInternal
+        )
+    }
+
+    private var commandPreview: String {
+        canCreate ? request.commandDescription : "container network create <name>"
     }
 }
 

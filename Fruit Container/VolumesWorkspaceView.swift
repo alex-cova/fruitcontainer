@@ -21,8 +21,14 @@ struct VolumesWorkspaceView: View {
                 ProgressView("Loading volumes...")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if filteredVolumes.isEmpty {
-                ContentUnavailableView("No Volumes", systemImage: "internaldrive", description: Text("Create a volume for persistent container data."))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ActionableEmptyState(
+                    title: searchText.isEmpty ? "No Volumes" : "No Matching Volumes",
+                    systemImage: searchText.isEmpty ? "internaldrive" : "magnifyingglass",
+                    message: searchText.isEmpty ? "Create a volume for persistent container data." : "No volumes match \"\(searchText)\".",
+                    actionTitle: searchText.isEmpty ? "Create Volume" : "Clear Search",
+                    actionSystemImage: searchText.isEmpty ? "plus" : "xmark.circle",
+                    action: searchText.isEmpty ? { showingCreateSheet = true } : { searchText = "" }
+                )
             } else {
                 HSplitView {
                     volumeTable.frame(minWidth: 560)
@@ -102,21 +108,36 @@ struct VolumesWorkspaceView: View {
             TableColumn("Name") { volume in
                 VStack(alignment: .leading, spacing: 2) {
                     Text(volume.name).fontWeight(.medium)
-                    Text(volume.id).font(.caption.monospaced()).foregroundStyle(.secondary).lineLimit(1)
+                    Text(volume.id)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Volume \(volume.name), ID \(volume.id)")
             }
+            .width(min: 180, ideal: 230)
             TableColumn("Driver") { volume in
                 Text(volume.driver ?? "-")
             }
+            .width(min: 86, ideal: 110, max: 140)
             TableColumn("Format") { volume in
                 Text(volume.format ?? "-")
             }
+            .width(min: 86, ideal: 110, max: 140)
             TableColumn("Size") { volume in
                 Text(volume.sizeInBytes.map(formatBytes) ?? "-")
+                    .monospacedDigit()
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             }
+            .width(min: 90, ideal: 110, max: 140)
             TableColumn("Attached") { volume in
                 Text("\(appModel.volumes.first { $0.name == volume.name }?.attachedContainerCount ?? 0)")
+                    .monospacedDigit()
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             }
+            .width(min: 72, ideal: 86, max: 100)
         }
     }
 
@@ -126,26 +147,37 @@ struct VolumesWorkspaceView: View {
                 if let volume = selectedVolume {
                     Panel(title: "Details", systemImage: "info.circle") {
                         DetailRow("Name", volume.name)
+                        DetailRow("ID", volume.id)
                         DetailRow("Driver", inspect?.driver ?? volume.driver ?? "-")
                         DetailRow("Format", inspect?.format ?? volume.format ?? "-")
+                    }
+                    Panel(title: "Storage", systemImage: "internaldrive") {
                         DetailRow("Source", inspect?.source ?? volume.source ?? "-")
                         DetailRow("Size", (inspect?.sizeInBytes ?? volume.sizeInBytes).map(formatBytes) ?? "-")
                         DetailRow("Created", inspect?.createdAt?.formatted(date: .abbreviated, time: .shortened) ?? volume.createdAt?.formatted(date: .abbreviated, time: .shortened) ?? "-")
                     }
+                    Panel(title: "Labels", systemImage: "tag") {
+                        KeyValueList(values: inspect?.labels ?? volume.labels)
+                    }
+                    Panel(title: "Options", systemImage: "slider.horizontal.3") {
+                        KeyValueList(values: inspect?.options ?? volume.options)
+                    }
                     Panel(title: "Inspect JSON", systemImage: "curlybraces") {
                         HStack {
-                            Button("Reload") { Task { await loadInspect() } }
-                            Button("Copy") { copyToPasteboard(inspect?.rawJSON ?? "") }.disabled(inspect == nil)
+                            Button { Task { await loadInspect() } } label: { Label("Reload", systemImage: "arrow.clockwise") }
+                            Button { copyToPasteboard(inspect?.rawJSON ?? "") } label: { Label("Copy JSON", systemImage: "doc.on.doc") }
+                                .disabled(inspect == nil)
                             Spacer()
                         }
-                        Text(inspect?.rawJSON ?? "No inspect output loaded.")
-                            .font(.system(.caption, design: .monospaced))
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        CodeBlock(text: inspect?.rawJSON ?? "", emptyText: "No inspect output loaded.")
                     }
                 } else {
-                    ContentUnavailableView("Select a Volume", systemImage: "internaldrive", description: Text("Inspect mount source, labels, options, and raw JSON."))
-                        .frame(maxWidth: .infinity, minHeight: 240)
+                    ActionableEmptyState(
+                        title: "Select a Volume",
+                        systemImage: "internaldrive",
+                        message: "Inspect mount source, labels, options, and raw JSON."
+                    )
+                    .frame(minHeight: 240)
                 }
             }
             .padding(14)
@@ -233,39 +265,63 @@ private struct CreateVolumeSheet: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("Volume") {
-                    TextField("Name", text: $name)
-                    TextField("Size", text: $size)
-                }
-                Section("Metadata") {
-                    TextField("Labels", text: $labels)
-                    TextField("Options", text: $options)
-                }
-            }
-            .formStyle(.grouped)
-            .navigationTitle("Create Volume")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Create") {
-                        onCreate(
-                            VolumeCreateViewRequest(
-                                name: name.trimmingCharacters(in: .whitespacesAndNewlines),
-                                size: size.nilIfEmpty,
-                                labels: dictionaryList(labels),
-                                options: dictionaryList(options)
-                            )
-                        )
-                        dismiss()
+            VStack(spacing: 0) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Panel(title: "Volume", systemImage: "internaldrive") {
+                            FormField(title: "Name", text: $name, placeholder: "app-data", helper: "Required unique volume name.")
+                            FormField(title: "Size", text: $size, placeholder: "10g", helper: "Optional storage limit, for drivers that support it.", isMonospaced: true)
+                        }
+                        Panel(title: "Metadata", systemImage: "tag") {
+                            FormField(title: "Labels", text: $labels, placeholder: "key=value,key2=value2", helper: "Comma-separated metadata pairs.", isMonospaced: true)
+                            FormField(title: "Options", text: $options, placeholder: "type=tmpfs,o=size=1g", helper: "Comma-separated driver option pairs.", isMonospaced: true)
+                        }
                     }
-                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .padding(18)
                 }
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 12) {
+                    CommandPreview(command: commandPreview)
+                    HStack {
+                        Button("Cancel") { dismiss() }
+                            .keyboardShortcut(.cancelAction)
+                        Spacer()
+                        Button {
+                            onCreate(request)
+                            dismiss()
+                        } label: {
+                            Label("Create Volume", systemImage: "plus")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(!canCreate)
+                    }
+                }
+                .padding(18)
+                .background(FruitTheme.chromeFill)
             }
+            .navigationTitle("Create Volume")
         }
-        .frame(width: 460, height: 340)
+        .frame(width: 560, height: 520)
+    }
+
+    private var canCreate: Bool {
+        name.nilIfEmpty != nil
+    }
+
+    private var request: VolumeCreateViewRequest {
+        VolumeCreateViewRequest(
+            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+            size: size.nilIfEmpty,
+            labels: dictionaryList(labels),
+            options: dictionaryList(options)
+        )
+    }
+
+    private var commandPreview: String {
+        canCreate ? request.commandDescription : "container volume create <name>"
     }
 }
 

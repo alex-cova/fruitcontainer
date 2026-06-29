@@ -25,11 +25,20 @@ struct ActivityWorkspaceView: View {
                 ResourceHeader(title: "Logs", subtitle: headerSubtitle, searchText: $searchText)
                 Divider()
                 if appModel.activities.isEmpty {
-                    ContentUnavailableView("No Operations", systemImage: "clock.arrow.circlepath", description: Text("Command history, errors, and outputs appear here."))
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    ActionableEmptyState(
+                        title: "No Operations",
+                        systemImage: "clock.arrow.circlepath",
+                        message: "Command history, errors, and output appear here after you run an operation."
+                    )
                 } else if filteredActivities.isEmpty {
-                    ContentUnavailableView("No Matching Log Entries", systemImage: "magnifyingglass", description: Text("No operations match “\(searchText)”."))
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    ActionableEmptyState(
+                        title: "No Matching Log Entries",
+                        systemImage: "magnifyingglass",
+                        message: "No operations match \"\(searchText)\".",
+                        actionTitle: "Clear Search",
+                        actionSystemImage: "xmark.circle",
+                        action: { searchText = "" }
+                    )
                 } else {
                     Table(filteredActivities, selection: $selection) {
                         TableColumn("Operation") { activity in
@@ -37,19 +46,26 @@ struct ActivityWorkspaceView: View {
                                 Text(activity.title).fontWeight(.medium).lineLimit(1)
                                 Text(activity.commandDescription).font(.caption.monospaced()).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                             }
+                            .accessibilityElement(children: .combine)
+                            .accessibilityLabel("\(activity.title), \(activity.status.rawValue), \(activity.commandDescription)")
                         }
+                        .width(min: 230, ideal: 320)
                         TableColumn("Status") { activity in
                             StatusBadge(text: activity.status.rawValue.capitalized, color: color(for: activity.status))
                         }
+                        .width(min: 100, ideal: 120, max: 140)
                         TableColumn("Type") { activity in
                             Text(activity.kind.rawValue.capitalized).foregroundStyle(.secondary)
                         }
+                        .width(min: 86, ideal: 100, max: 120)
                         TableColumn("Section") { activity in
                             Text(activity.section.title).foregroundStyle(.secondary)
                         }
+                        .width(min: 90, ideal: 110, max: 130)
                         TableColumn("Logged") { activity in
                             Text(activity.queuedAt.formatted(date: .abbreviated, time: .shortened)).foregroundStyle(.secondary)
                         }
+                        .width(min: 140, ideal: 170)
                     }
                 }
             }
@@ -90,23 +106,26 @@ struct ActivityWorkspaceView: View {
                     }
                     Panel(title: "Command", systemImage: "terminal") {
                         HStack {
-                            Button("Copy") { copyToPasteboard(activity.commandDescription) }
+                            Button { copyToPasteboard(activity.commandDescription) } label: { Label("Copy Command", systemImage: "doc.on.doc") }
                             Spacer()
                         }
-                        Text(activity.commandDescription)
-                            .font(.system(.caption, design: .monospaced))
-                            .textSelection(.enabled)
+                        CodeBlock(text: activity.commandDescription)
                     }
                     Panel(title: "Output", systemImage: "doc.text") {
-                        Button("Copy Output") { copyToPasteboard(activity.outputLog) }
-                            .disabled(activity.outputLog.isEmpty)
-                        Text(activity.outputLog.isEmpty ? "No output captured for this operation." : activity.outputLog)
-                            .font(.system(.caption, design: .monospaced))
-                            .textSelection(.enabled)
+                        HStack {
+                            Button { copyToPasteboard(activity.outputLog) } label: { Label("Copy Output", systemImage: "doc.on.doc") }
+                                .disabled(activity.outputLog.isEmpty)
+                            Spacer()
+                        }
+                        CodeBlock(text: activity.outputLog, emptyText: "No output captured for this operation.")
                     }
                 } else {
-                    ContentUnavailableView("Select an Operation", systemImage: "doc.text.magnifyingglass", description: Text("Inspect command text, status, and captured output."))
-                        .frame(maxWidth: .infinity, minHeight: 260)
+                    ActionableEmptyState(
+                        title: "Select an Operation",
+                        systemImage: "doc.text.magnifyingglass",
+                        message: "Inspect command text, status, and captured output."
+                    )
+                    .frame(minHeight: 260)
                 }
             }
             .padding(14)

@@ -108,6 +108,9 @@ enum FruitTheme {
     static let pageBackground = Color(nsColor: .textBackgroundColor)
     static let controlBackground = Color(nsColor: .controlBackgroundColor)
     static let separator = Color(nsColor: .separatorColor)
+    static let hairline = Color(nsColor: .separatorColor).opacity(0.55)
+    static let selectedFill = Color.accentColor.opacity(0.12)
+    static let cornerRadius: CGFloat = 12
     static let cardFill = AnyShapeStyle(.quaternary)
     static let chromeFill = AnyShapeStyle(.bar)
 }
